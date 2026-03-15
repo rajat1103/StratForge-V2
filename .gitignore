@@ -1,0 +1,35 @@
+## Secrets — NEVER commit these
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+backend/.env
+backend/.env.local
+
+## Dependencies
+frontend/node_modules/
+backend/node_modules/
+
+## Build outputs
+frontend/.next/
+frontend/out/
+backend/dist/
+
+## Prisma
+frontend/prisma/migrations/
+*.db
+*.db-journal
+
+## TypeScript
+*.tsbuildinfo
+frontend/next-env.d.ts
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Editor
+.vscode/settings.json
+.idea/
+
+## Vercel
+.vercel
