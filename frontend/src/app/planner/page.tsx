@@ -1,15 +1,16 @@
 'use client'
 import React from 'react'
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, addDays, startOfWeek, isSameDay } from 'date-fns'
 import { ChevronLeft, ChevronRight, Calendar, Sparkles, CheckCircle, Clock } from 'lucide-react'
 import { cn, formatMinutes } from '@/lib/utils'
 
 export default function PlannerPage() {
   const [weekOffset, setWeekOffset] = useState(0)
+  const qc = useQueryClient()
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['plans'],
     queryFn: () => fetch('/api/plans').then(r => r.json()),
   })
@@ -33,6 +34,15 @@ export default function PlannerPage() {
     const tasks = tasksForDay(day)
     return sum + tasks.reduce((s: number, t: any) => s + (t.durationMins || 0), 0)
   }, 0)
+
+  const toggleTask = async (taskId: string) => {
+    try {
+      await fetch(`/api/plans/tasks/${taskId}`, { method: 'PATCH' })
+      qc.invalidateQueries({ queryKey: ['plans'] })
+    } catch (err) {
+      console.error('Failed to toggle task:', err)
+    }
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -67,7 +77,11 @@ export default function PlannerPage() {
         </div>
       </div>
 
-      {plans.length === 0 ? (
+      {isLoading ? (
+        <div className="glass rounded-2xl border border-sf-border/40 p-12 text-center text-sf-muted">
+          Loading your study plans...
+        </div>
+      ) : plans.length === 0 ? (
         <div className="glass rounded-2xl border border-dashed border-sf-border/60 p-16 text-center">
           <Sparkles size={32} className="text-sf-cyan mx-auto mb-3 opacity-60" />
           <p className="font-display text-lg font-bold text-white mb-2">No study plan yet</p>
@@ -84,7 +98,7 @@ export default function PlannerPage() {
           </div>
 
           {/* Calendar grid */}
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
             {weekDays.map(day => {
               const tasks = tasksForDay(day)
               const isToday = isSameDay(day, new Date())
@@ -94,7 +108,7 @@ export default function PlannerPage() {
                 <div
                   key={day.toISOString()}
                   className={cn(
-                    'glass rounded-xl border p-2 min-h-[140px] transition-all',
+                    'glass rounded-xl border p-2 min-h-[140px] transition-all flex flex-col',
                     isToday ? 'border-sf-cyan/40 bg-sf-cyan/5' : 'border-sf-border/40'
                   )}
                 >
@@ -115,32 +129,40 @@ export default function PlannerPage() {
                   </div>
 
                   {/* Tasks */}
-                  <div className="space-y-1">
-                    {tasks.slice(0, 4).map((task: any) => (
-                      <div
-                        key={task.id}
-                        className={cn(
-                          'rounded-lg px-1.5 py-1 text-xs transition-all border',
-                          task.completed ? 'opacity-50' : ''
-                        )}
-                        style={{
-                          background: `${task.examColor}12`,
-                          borderColor: `${task.examColor}25`,
-                          color: task.examColor,
-                        }}
-                      >
-                        <div className="flex items-center gap-1">
-                          {task.completed
-                            ? <CheckCircle size={9} />
-                            : <Clock size={9} />
-                          }
-                          <span className="truncate leading-tight font-medium">
-                            {task.topic?.title || 'Topic'}
-                          </span>
+                  <div className="space-y-1 flex-1">
+                    {tasks.length === 0 ? (
+                      <p className="text-[10px] text-sf-muted text-center italic mt-4">Rest / Buffer</p>
+                    ) : (
+                      tasks.slice(0, 4).map((task: any) => (
+                        <div
+                          key={task.id}
+                          onClick={() => toggleTask(task.id)}
+                          title="Click to mark complete/incomplete"
+                          className={cn(
+                            'rounded-lg px-2 py-1 text-xs transition-all border cursor-pointer hover:scale-[1.02]',
+                            task.completed ? 'opacity-50 line-through' : ''
+                          )}
+                          style={{
+                            background: `${task.examColor}18`,
+                            borderColor: `${task.examColor}40`,
+                            color: task.examColor,
+                          }}
+                        >
+                          <div className="flex items-center gap-1">
+                            {task.completed
+                              ? <CheckCircle size={10} className="shrink-0 text-sf-green" />
+                              : <Clock size={10} className="shrink-0" />
+                            }
+                            <span className="truncate leading-tight font-medium">
+                              {task.topic?.title || 'Topic'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] opacity-80 mt-0.5 truncate pl-3.5">
+                            {formatMinutes(task.durationMins)} · {task.taskType}
+                          </p>
                         </div>
-                        <p className="text-xs opacity-70 mt-0.5 truncate">{formatMinutes(task.durationMins)}</p>
-                      </div>
-                    ))}
+                      ))
+                    )}
                     {tasks.length > 4 && (
                       <p className="text-xs text-sf-muted text-center">+{tasks.length - 4} more</p>
                     )}
@@ -166,8 +188,8 @@ export default function PlannerPage() {
                     <div>
                       <p className="text-sm font-medium text-white">{plan.exam?.title}</p>
                       <p className="text-xs text-sf-muted">
-                        Generated {format(new Date(plan.generatedAt), 'MMM d')}
-                        {plan.exam?.examDate && ` · Exam: ${format(new Date(plan.exam.examDate), 'MMM d')}`}
+                        Generated {format(new Date(plan.generatedAt), 'MMM d, yyyy')}
+                        {plan.exam?.examDate && ` · Exam: ${format(new Date(plan.exam.examDate), 'MMM d, yyyy')}`}
                       </p>
                     </div>
                     <div className="text-right">

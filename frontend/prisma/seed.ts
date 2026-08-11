@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 const prisma = new PrismaClient()
 
 async function main() {
-  console.log('🌱 Seeding StratForge database...')
+  console.log('🌱 Seeding StratForge database with dynamic relative dates...')
 
   const passwordHash = await bcrypt.hash('password123', 12)
 
@@ -20,26 +20,41 @@ async function main() {
     },
   })
 
+  // Dynamic relative dates based on current execution time
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const jeeExamDate = new Date(today.getTime() + 75 * 86400000) // 75 days in future
+  const awsExamDate = new Date(today.getTime() + 45 * 86400000) // 45 days in future
+
   // Streak
   await prisma.streak.upsert({
     where: { userId: user.id },
-    update: {},
+    update: {
+      currentStreak: 12,
+      longestStreak: 24,
+      totalStudyDays: 47,
+      lastActiveDate: today,
+    },
     create: {
       userId: user.id,
       currentStreak: 12,
       longestStreak: 24,
       totalStudyDays: 47,
-      lastActiveDate: new Date(),
+      lastActiveDate: today,
     },
   })
+
+  // Delete existing exams to prevent duplicate stale exams
+  await prisma.exam.deleteMany({ where: { userId: user.id } })
 
   // Exam 1: JEE Advanced
   const jeeExam = await prisma.exam.create({
     data: {
       userId: user.id,
-      title: 'JEE Advanced 2025',
+      title: 'JEE Advanced 2026',
       type: 'competitive',
-      examDate: new Date('2025-05-25'),
+      examDate: jeeExamDate,
       description: 'Joint Entrance Examination for IITs',
       theme: 'engineering',
       colorAccent: '#00D4FF',
@@ -81,7 +96,7 @@ async function main() {
       userId: user.id,
       title: 'AWS Solutions Architect',
       type: 'certification',
-      examDate: new Date('2025-04-10'),
+      examDate: awsExamDate,
       description: 'AWS Certified Solutions Architect - Associate',
       theme: 'programming',
       colorAccent: '#FF9500',
@@ -114,37 +129,113 @@ async function main() {
     })
   }
 
-  // Sample progress logs (last 14 days)
+  // Sample progress logs & study sessions (last 14 days)
   const allTopics = await prisma.topic.findMany({ where: { exam: { userId: user.id } } })
-  const today = new Date()
-  
+
   for (let i = 13; i >= 0; i--) {
     const logDate = new Date(today)
     logDate.setDate(today.getDate() - i)
-    
+
     const topicsForDay = allTopics.slice(0, Math.floor(Math.random() * 3) + 1)
     for (const topic of topicsForDay) {
+      const minutesSpent = Math.floor(Math.random() * 90) + 30
+      const score = Math.floor(Math.random() * 40) + 50
+      const sessionType = ['study', 'revision', 'practice'][Math.floor(Math.random() * 3)]
+
       await prisma.progressLog.create({
         data: {
           topicId: topic.id,
           userId: user.id,
-          score: Math.floor(Math.random() * 40) + 50,
-          minutesSpent: Math.floor(Math.random() * 90) + 30,
+          score,
+          minutesSpent,
           logDate,
-          sessionType: ['study', 'revision', 'practice'][Math.floor(Math.random() * 3)],
+          sessionType,
+        },
+      })
+
+      await prisma.studySession.create({
+        data: {
+          userId: user.id,
+          topicId: topic.id,
+          startedAt: logDate,
+          endedAt: new Date(logDate.getTime() + minutesSpent * 60000),
+          durationMins: minutesSpent,
+          focusScore: Math.floor(Math.random() * 3) + 7, // 7-10
+          mode: 'pomodoro',
+          notes: 'Seeded focus session',
         },
       })
     }
   }
 
-  // AI Insights
+  // Create initial study plans for both exams starting TODAY
+  for (const exam of [jeeExam, awsExam]) {
+    const examTopics = await prisma.topic.findMany({ where: { examId: exam.id }, orderBy: { order: 'asc' } })
+    
+    const tasksData: any[] = []
+    const dailySchedule: any[] = []
+
+    for (let dayIdx = 0; dayIdx < 14; dayIdx++) {
+      const taskDate = new Date(today)
+      taskDate.setDate(today.getDate() + dayIdx)
+      const topic = examTopics[dayIdx % examTopics.length]
+
+      dailySchedule.push({
+        date: taskDate.toISOString().split('T')[0],
+        tasks: [{
+          topicId: topic.id,
+          topicTitle: topic.title,
+          durationMins: 60,
+          taskType: topic.masteryLevel > 0.8 ? 'revision' : 'study',
+        }],
+        totalMins: 60,
+      })
+    }
+
+    const plan = await prisma.studyPlan.create({
+      data: {
+        examId: exam.id,
+        schedule: {
+          dailySchedule,
+          milestones: [{ date: jeeExamDate.toISOString().split('T')[0], title: 'Exam Readiness Target', topicsCompleted: examTopics.slice(0, 3).map(t => t.title) }],
+          insights: ['Focus on weak topics first', 'Maintain daily study consistency'],
+          estimatedCompletion: jeeExamDate.toISOString().split('T')[0],
+          weeklyHours: 28,
+          recommendedOrder: examTopics.map(t => t.title),
+        },
+        validUntil: exam.examDate,
+        isActive: true,
+      },
+    })
+
+    for (let dayIdx = 0; dayIdx < 14; dayIdx++) {
+      const taskDate = new Date(today)
+      taskDate.setDate(today.getDate() + dayIdx)
+      const topic = examTopics[dayIdx % examTopics.length]
+
+      tasksData.push({
+        planId: plan.id,
+        topicId: topic.id,
+        scheduledDate: taskDate,
+        durationMins: 60,
+        completed: dayIdx < 2, // First 2 tasks completed
+        taskType: topic.masteryLevel > 0.8 ? 'revision' : 'study',
+        completedAt: dayIdx < 2 ? taskDate : null,
+      })
+    }
+
+    await prisma.planTask.createMany({ data: tasksData })
+  }
+
+  // AI Insights with relative dates
+  const jeeExamDateStr = jeeExamDate.toISOString().split('T')[0]
   await prisma.aIInsight.createMany({
     data: [
       {
         userId: user.id,
         insightType: 'weak_topic',
         title: 'Organic Chemistry needs attention',
-        content: 'You have only 15% mastery in Organic Chemistry with 20 estimated days remaining. At your current pace, you may not finish before the exam. Consider increasing daily time by 45 minutes.',
+        content: 'You have 15% mastery in Organic Chemistry with 20 estimated days remaining. Consider increasing daily time by 45 minutes.',
         payload: { topicId: jeeTopics[4].title, suggestedAction: 'increase_time', urgency: 'high' },
         priority: 1,
       },
@@ -152,23 +243,23 @@ async function main() {
         userId: user.id,
         insightType: 'prediction',
         title: 'JEE Advanced readiness: 52%',
-        content: 'Based on your current progress velocity, you\'ll reach 85% readiness 12 days before your exam date. Keep your current pace and focus on high-priority topics.',
-        payload: { readinessScore: 52, predictedDate: '2025-05-13', examDate: '2025-05-25' },
+        content: 'Based on your current progress velocity, you will reach 85% readiness before your exam date.',
+        payload: { readinessScore: 52, examDate: jeeExamDateStr },
         priority: 1,
       },
       {
         userId: user.id,
         insightType: 'schedule_suggestion',
         title: 'Optimal study window: 9 PM – 11 PM',
-        content: 'Your focus score is 23% higher during evening sessions. Consider scheduling your hardest topics (Electromagnetism, Organic Chemistry) during this window.',
+        content: 'Your focus score is 23% higher during evening sessions. Consider scheduling your hardest topics during this window.',
         payload: { peakHours: ['21:00', '23:00'], avgFocusScore: 8.2 },
         priority: 2,
       },
       {
         userId: user.id,
         insightType: 'motivation',
-        title: '12-day streak! You\'re on fire 🔥',
-        content: 'You\'ve studied every day for 12 consecutive days. You\'re in the top 8% of StratForge users by consistency. Keep it up!',
+        title: '12-day streak! You are on fire 🔥',
+        content: 'You have studied every day for 12 consecutive days. You are in the top 8% of StratForge users by consistency.',
         payload: { streakDays: 12, percentile: 92 },
         priority: 3,
       },
@@ -178,7 +269,7 @@ async function main() {
   await prisma.exam.update({ where: { id: jeeExam.id }, data: { totalTopics: jeeTopics.length } })
   await prisma.exam.update({ where: { id: awsExam.id }, data: { totalTopics: awsTopics.length } })
 
-  console.log('✅ Seed complete!')
+  console.log('✅ Seed complete with dynamic future exam dates and initial active plans/tasks!')
   console.log('📧 Demo login: demo@stratforge.app / password123')
 }
 

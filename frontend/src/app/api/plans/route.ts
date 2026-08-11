@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/db/prisma'
 import { getSessionFromRequest } from '@/lib/auth'
-import { generateStudyPlan } from '@/lib/ai/client'
+import { generateStudyPlan, classifyAIError } from '@/lib/ai/client'
 import type { Exam, Topic } from '@/types'
 
 const generateSchema = z.object({
@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { examId, dailyHours } = generateSchema.parse(body)
 
+    // Ownership check — user may only generate plans for their own exams
     const exam = await prisma.exam.findFirst({
       where: { id: examId, userId: session.userId },
       include: { topics: true },
@@ -28,14 +29,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Add topics before generating a plan' }, { status: 400 })
     }
 
+    // Deactivate existing plans for this exam
     await prisma.studyPlan.updateMany({ where: { examId, isActive: true }, data: { isActive: false } })
 
+    // Generate plan via AI service (Groq → Llama)
     const generatedPlan = await generateStudyPlan(
       exam as unknown as Exam,
       exam.topics as unknown as Topic[],
       dailyHours
     )
 
+    // Persist study plan header
     const plan = await prisma.studyPlan.create({
       data: {
         examId,
@@ -45,7 +49,8 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    const topicMap = new Map(exam.topics.map((t: typeof exam.topics[0]) => [t.id, t]))
+    // Persist individual plan tasks (only for topics that exist in this exam)
+    const topicMap = new Map(exam.topics.map(t => [t.id, t]))
     const taskData: Array<{
       planId: string
       topicId: string
@@ -80,8 +85,10 @@ export async function POST(req: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors[0].message }, { status: 400 })
     }
-    console.error('Plan generation error:', error)
-    return NextResponse.json({ error: 'Failed to generate plan' }, { status: 500 })
+    const { code, userMessage, httpStatus } = classifyAIError(error)
+    const e = error as Record<string, unknown>
+    console.error(`[AI_PLANS] ${code}: status=${e?.status} msg=${String(e?.message ?? '').substring(0, 200)}`)
+    return NextResponse.json({ error: userMessage, code }, { status: httpStatus })
   }
 }
 
@@ -100,12 +107,6 @@ export async function GET(req: NextRequest) {
     },
     include: {
       tasks: {
-        where: {
-          scheduledDate: {
-            gte: new Date(Date.now() - 86400000),
-            lte: new Date(Date.now() + 30 * 86400000),
-          },
-        },
         include: { topic: true },
         orderBy: { scheduledDate: 'asc' },
       },

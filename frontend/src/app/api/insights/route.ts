@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/db/prisma'
 import { getSessionFromRequest } from '@/lib/auth'
-import { generateInsights } from '@/lib/ai/client'
+import { generateInsights, classifyAIError } from '@/lib/ai/client'
 import type { Exam } from '@/types'
 
 export async function GET(req: NextRequest) {
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     orderBy: [{ priority: 'asc' }, { generatedAt: 'desc' }],
     take: 20,
   })
-  const unread = insights.filter((i: typeof insights[0]) => !i.read).length
+  const unread = insights.filter(i => !i.read).length
   return NextResponse.json({ data: insights, unread })
 }
 
@@ -23,31 +23,40 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const exams = await prisma.exam.findMany({
-      where: { userId: session.userId, status: 'active' },
-      include: { topics: { select: { id: true, title: true, masteryLevel: true, priority: true, status: true } } },
-    })
+    // Fetch real student data — scoped to session.userId
+    const [exams, recentLogs] = await Promise.all([
+      prisma.exam.findMany({
+        where: { userId: session.userId, status: 'active' },
+        include: {
+          topics: {
+            select: { id: true, title: true, masteryLevel: true, priority: true, status: true },
+          },
+        },
+      }),
+      prisma.progressLog.findMany({
+        where: {
+          userId: session.userId,
+          logDate: { gte: new Date(Date.now() - 7 * 86400000) },
+        },
+        include: { topic: { select: { title: true } } },
+        orderBy: { logDate: 'desc' },
+        take: 30,
+      }),
+    ])
 
-    const since = new Date()
-    since.setDate(since.getDate() - 7)
-    const recentLogs = await prisma.progressLog.findMany({
-      where: { userId: session.userId, logDate: { gte: since } },
-      include: { topic: { select: { title: true } } },
-      orderBy: { logDate: 'desc' },
-      take: 30,
-    })
-
-    const logsForAI = recentLogs.map((l: typeof recentLogs[0]) => ({
+    const logsForAI = recentLogs.map(l => ({
       topicTitle: l.topic.title,
       score: l.score,
       minutesSpent: l.minutesSpent,
       logDate: l.logDate,
     }))
 
+    // Generate insights via AI service (Groq → Llama)
     const insights = await generateInsights(session.userId, exams as unknown as Exam[], logsForAI)
+
     if (insights.length > 0) {
       await prisma.aIInsight.createMany({
-        data: insights.map((i: typeof insights[0]) => ({
+        data: insights.map(i => ({
           userId: session.userId,
           insightType: i.insightType,
           title: i.title,
@@ -65,8 +74,10 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json({ data: all, generated: insights.length })
   } catch (error: unknown) {
-    console.error('Insight generation error:', error)
-    return NextResponse.json({ error: 'Failed to generate insights' }, { status: 500 })
+    const { code, userMessage, httpStatus } = classifyAIError(error)
+    const e = error as Record<string, unknown>
+    console.error(`[AI_INSIGHTS] ${code}: status=${e?.status} msg=${String(e?.message ?? '').substring(0, 200)}`)
+    return NextResponse.json({ error: userMessage, code }, { status: httpStatus })
   }
 }
 

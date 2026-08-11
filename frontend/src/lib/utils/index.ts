@@ -14,9 +14,19 @@ export function formatRelative(date: Date | string) {
   return formatDistanceToNow(new Date(date), { addSuffix: true })
 }
 
+/**
+ * Returns difference in calendar days between target date and today.
+ * Negative number = past date
+ * 0 = today
+ * Positive number = days remaining in future
+ */
 export function daysUntil(date: Date | string | null | undefined): number | null {
   if (!date) return null
-  return Math.max(0, differenceInDays(new Date(date), new Date()))
+  const d = new Date(date)
+  const today = new Date()
+  d.setHours(0, 0, 0, 0)
+  today.setHours(0, 0, 0, 0)
+  return differenceInDays(d, today)
 }
 
 export function getMasteryLabel(level: number): string {

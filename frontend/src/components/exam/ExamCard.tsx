@@ -1,10 +1,9 @@
 'use client'
 import React from 'react'
 import Link from 'next/link'
-import { Calendar, BookOpen, TrendingUp, ChevronRight } from 'lucide-react'
+import { Calendar, BookOpen, ChevronRight } from 'lucide-react'
 import { ProgressRing } from '@/components/charts/ProgressRing'
 import { daysUntil, formatDate, getThemeConfig } from '@/lib/utils'
-import { Exam } from '@/types'
 
 export function ExamCard({ exam }: { exam: any; key?: React.Key }) {
   const days = daysUntil(exam.examDate)
@@ -15,8 +14,9 @@ export function ExamCard({ exam }: { exam: any; key?: React.Key }) {
   const totalTopics = exam.topics?.length || exam.totalTopics || 0
 
   const urgencyColor =
-    days !== null && days <= 7  ? '#FF4466' :
-    days !== null && days <= 30 ? '#FFB347' : color
+    days === null || days < 0   ? '#64748B' :
+    days <= 7                  ? '#FF4466' :
+    days <= 30                 ? '#FFB347' : color
 
   return (
     <Link href={`/exam/${exam.id}`}>
@@ -62,7 +62,7 @@ export function ExamCard({ exam }: { exam: any; key?: React.Key }) {
           {exam.examDate && (
             <span className="flex items-center gap-1">
               <Calendar size={11} />
-              {formatDate(exam.examDate, 'MMM d')}
+              {formatDate(exam.examDate, 'MMM d, yyyy')}
             </span>
           )}
         </div>
@@ -89,7 +89,7 @@ export function ExamCard({ exam }: { exam: any; key?: React.Key }) {
                 border: `1px solid ${urgencyColor}30`,
               }}
             >
-              {days === 0 ? 'TODAY' : days === 1 ? '1 day left' : `${days} days left`}
+              {days < 0 ? 'Past Exam' : days === 0 ? 'TODAY' : days === 1 ? '1 day left' : `${days} days left`}
             </span>
           ) : (
             <span className="text-xs text-sf-muted">No deadline set</span>

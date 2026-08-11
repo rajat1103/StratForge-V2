@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
       : 0
 
   const upcomingDeadlines = exams
-    .filter(e => e.examDate != null)
+    .filter(e => e.examDate != null && new Date(e.examDate).getTime() >= Date.now() - 86400000)
     .map(e => ({
       examId: e.id,
       examTitle: e.title,
@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
               100
           )
         : 0,
-      colorAccent: '#00D4FF',
+      colorAccent: e.colorAccent || '#00D4FF',
     }))
     .sort((a, b) => a.daysLeft - b.daysLeft)
     .slice(0, 3)

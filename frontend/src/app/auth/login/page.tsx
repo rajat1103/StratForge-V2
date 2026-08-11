@@ -138,7 +138,7 @@ export default function LoginPage() {
 
         {/* Feature pills */}
         <div className="flex items-center justify-center gap-3 mt-6 flex-wrap">
-          {['AI Study Plans', 'Progress Tracking', 'Claude Powered'].map(f => (
+          {['AI Study Plans', 'Progress Tracking', 'Llama Powered'].map(f => (
             <span
               key={f}
               className="text-xs text-sf-muted border border-sf-border/40 px-2.5 py-1 rounded-full"

@@ -3,7 +3,7 @@ import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   AreaChart, Area, BarChart, Bar, RadarChart, Radar, PolarGrid,
-  PolarAngleAxis, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell
+  PolarAngleAxis, YAxis, XAxis, Tooltip, ResponsiveContainer, Cell
 } from 'recharts'
 import { TrendingUp, Clock, Target, Flame, Award } from 'lucide-react'
 import { StatCard } from '@/components/dashboard/StatCard'
@@ -58,16 +58,39 @@ export default function AnalyticsPage() {
     return { date: format(date, 'MMM d'), minutes, score: avgScore }
   })
 
-  // Per-exam radar data
-  const radarData = exams.map((e: any) => ({
-    exam: e.title.slice(0, 12),
-    completion: e.completionPct,
-    topics: Math.min(100, ((e.topics?.length || 0) / 15) * 100),
-    mastery: Math.round(
-      (e.topics || []).reduce((s: number, t: any) => s + t.masteryLevel, 0) /
-      Math.max(1, (e.topics || []).length) * 100
-    ),
-  }))
+  // Per-exam dimension radar data
+  // Dimensions (Axes around polygon): Completion, Mastery, Study Time, Confidence, Consistency
+  const radarDimensions = ['Completion', 'Mastery', 'Study Time', 'Confidence', 'Consistency']
+
+  const radarData = radarDimensions.map(dim => {
+    const row: Record<string, any> = { dimension: dim }
+    exams.forEach((e: any) => {
+      if (dim === 'Completion') {
+        row[e.title] = e.completionPct || 0
+      } else if (dim === 'Mastery') {
+        const topics = e.topics || []
+        const avgMastery = topics.length
+          ? Math.round((topics.reduce((s: number, t: any) => s + t.masteryLevel, 0) / topics.length) * 100)
+          : 0
+        row[e.title] = avgMastery
+      } else if (dim === 'Study Time') {
+        const examLogs = logs.filter((l: any) => l.topic?.examId === e.id)
+        const mins = examLogs.reduce((s: number, l: any) => s + l.minutesSpent, 0)
+        row[e.title] = Math.min(100, Math.round((mins / 300) * 100))
+      } else if (dim === 'Confidence') {
+        const examLogs = logs.filter((l: any) => l.topic?.examId === e.id)
+        const avgConf = examLogs.length
+          ? Math.round(examLogs.reduce((s: number, l: any) => s + l.score, 0) / examLogs.length)
+          : 65
+        row[e.title] = avgConf
+      } else if (dim === 'Consistency') {
+        const topics = e.topics || []
+        const activeTopics = topics.filter((t: any) => t.status !== 'not_started').length
+        row[e.title] = topics.length ? Math.round((activeTopics / topics.length) * 100) : 0
+      }
+    })
+    return row
+  })
 
   // Session type breakdown
   const sessionTypes = ['study', 'revision', 'practice'].map(type => ({
@@ -240,43 +263,42 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          {/* Radar: exam comparison */}
-          {radarData.length > 0 && (
+          {/* Radar: exam comparison across dimensions */}
+          {exams.length > 0 && (
             <div className="glass rounded-2xl border border-sf-border/50 p-4">
               <h3 className="font-display text-sm font-bold text-white tracking-wide mb-3">
                 EXAM COMPARISON
               </h3>
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={220}>
                 <RadarChart data={radarData}>
                   <PolarGrid stroke="rgba(30,45,74,0.8)" />
                   <PolarAngleAxis
-                    dataKey="exam"
-                    tick={{ fill: '#64748B', fontSize: 10 }}
+                    dataKey="dimension"
+                    tick={{ fill: '#94A3B8', fontSize: 11, fontWeight: 500 }}
                   />
-                  <Radar
-                    name="Completion"
-                    dataKey="completion"
-                    stroke="#00D4FF"
-                    fill="#00D4FF"
-                    fillOpacity={0.15}
-                  />
-                  <Radar
-                    name="Mastery"
-                    dataKey="mastery"
-                    stroke="#00FF9C"
-                    fill="#00FF9C"
-                    fillOpacity={0.1}
-                  />
+                  {exams.map((e: any) => (
+                    <Radar
+                      key={e.id}
+                      name={e.title}
+                      dataKey={e.title}
+                      stroke={e.colorAccent || '#00D4FF'}
+                      fill={e.colorAccent || '#00D4FF'}
+                      fillOpacity={0.2}
+                    />
+                  ))}
                   <Tooltip {...TOOLTIP_STYLE} />
                 </RadarChart>
               </ResponsiveContainer>
-              <div className="flex gap-4 justify-center mt-1">
-                <span className="flex items-center gap-1 text-xs text-sf-muted">
-                  <span className="w-2 h-2 rounded-full bg-sf-cyan inline-block" />Completion
-                </span>
-                <span className="flex items-center gap-1 text-xs text-sf-muted">
-                  <span className="w-2 h-2 rounded-full bg-sf-green inline-block" />Mastery
-                </span>
+              <div className="flex flex-wrap gap-3 justify-center mt-2">
+                {exams.map((e: any) => (
+                  <span key={e.id} className="flex items-center gap-1.5 text-xs text-sf-muted">
+                    <span
+                      className="w-2.5 h-2.5 rounded-full inline-block"
+                      style={{ background: e.colorAccent || '#00D4FF' }}
+                    />
+                    {e.title}
+                  </span>
+                ))}
               </div>
             </div>
           )}

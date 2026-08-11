@@ -145,13 +145,13 @@ export default function OnboardingPage() {
               </div>
               <h2 className="font-display text-2xl font-bold text-white">Welcome to StratForge!</h2>
               <p className="text-sf-muted text-sm leading-relaxed max-w-sm mx-auto">
-                Let's set up your first exam in 2 minutes. You can add more exams and customise everything later.
+                Let&apos;s set up your first exam in 2 minutes. You can add more exams and customise everything later.
               </p>
               <div className="grid grid-cols-3 gap-3 mt-4 text-left">
                 {[
                   { icon: '🧠', title: 'AI Plans', desc: 'Auto-generated study roadmaps' },
                   { icon: '📊', title: 'Progress', desc: 'Track mastery per topic' },
-                  { icon: '⚡', title: 'Insights', desc: 'Claude-powered advice' },
+                  { icon: '⚡', title: 'Insights', desc: 'AI-powered advice' },
                 ].map(f => (
                   <div key={f.title} className="glass-light rounded-xl p-3 border border-sf-border/40">
                     <span className="text-xl">{f.icon}</span>
@@ -161,7 +161,7 @@ export default function OnboardingPage() {
                 ))}
               </div>
               <button onClick={next} className="btn-primary w-full py-3 flex items-center justify-center gap-2 mt-2">
-                Let's Get Started <ArrowRight size={15} />
+                Let&apos;s Get Started <ArrowRight size={15} />
               </button>
             </div>
           )}
@@ -171,7 +171,7 @@ export default function OnboardingPage() {
             <div className="space-y-5">
               <div>
                 <h2 className="font-display text-xl font-bold text-white">Set Up Your First Exam</h2>
-                <p className="text-sf-muted text-sm mt-0.5">Tell us what you're preparing for</p>
+                <p className="text-sf-muted text-sm mt-0.5">Tell us what you&apos;re preparing for</p>
               </div>
 
               <div>
@@ -324,7 +324,7 @@ export default function OnboardingPage() {
               </div>
               <div>
                 <h2 className="font-display text-2xl font-bold text-white">Ready to Launch!</h2>
-                <p className="text-sf-muted text-sm mt-1">Here's what we'll set up for you</p>
+                <p className="text-sf-muted text-sm mt-1">Here&apos;s what we&apos;ll set up for you</p>
               </div>
 
               <div className="glass-light rounded-xl p-4 text-left space-y-2.5 border border-sf-border/40">

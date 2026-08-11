@@ -40,6 +40,41 @@ export default function FocusPage() {
     setRunning(false)
   }, [mode])
 
+  const handleTimerComplete = React.useCallback(async () => {
+    if (mode === 'focus') {
+      setCompleted(c => c + 1)
+      setLoggedToday(l => l + MODES.focus.minutes)
+      if (selectedTopicId) {
+        await Promise.all([
+          fetch('/api/progress', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topicId: selectedTopicId,
+              score: sessionScore,
+              minutesSpent: MODES.focus.minutes,
+              sessionType: 'study',
+            }),
+          }),
+          fetch('/api/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              topicId: selectedTopicId,
+              durationMins: MODES.focus.minutes,
+              mode: 'pomodoro',
+              focusScore: Math.round(sessionScore / 10),
+            }),
+          }),
+        ])
+        qc.invalidateQueries({ queryKey: ['dashboard'] })
+        qc.invalidateQueries({ queryKey: ['progress-30'] })
+        qc.invalidateQueries({ queryKey: ['sessions'] })
+      }
+      addNotification({ id: Date.now().toString(), type: 'success', title: 'Pomodoro complete! 🎯', message: 'Take a short break' })
+    }
+  }, [mode, selectedTopicId, sessionScore, qc, addNotification])
+
   useEffect(() => {
     if (running) {
       intervalRef.current = setInterval(() => {
@@ -57,28 +92,8 @@ export default function FocusPage() {
       if (intervalRef.current) clearInterval(intervalRef.current)
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [running])
+  }, [running, handleTimerComplete])
 
-  const handleTimerComplete = async () => {
-    if (mode === 'focus') {
-      setCompleted(c => c + 1)
-      setLoggedToday(l => l + MODES.focus.minutes)
-      if (selectedTopicId) {
-        await fetch('/api/progress', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            topicId: selectedTopicId,
-            score: sessionScore,
-            minutesSpent: MODES.focus.minutes,
-            sessionType: 'study',
-          }),
-        })
-        qc.invalidateQueries({ queryKey: ['dashboard'] })
-      }
-      addNotification({ id: Date.now().toString(), type: 'success', title: 'Pomodoro complete! 🎯', message: 'Take a short break' })
-    }
-  }
 
   const reset = () => {
     setRunning(false)

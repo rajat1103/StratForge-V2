@@ -57,7 +57,15 @@ export default function AssistantPage() {
         }),
       })
 
-      if (!res.ok) throw new Error('Failed')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Request failed' }))
+        const userMessage = errorData.error || 'AI assistant is temporarily unavailable. Please try again.'
+        setMessages(prev =>
+          prev.map(m => m.id === assistantId ? { ...m, content: userMessage } : m)
+        )
+        return
+      }
+
       const reader = res.body!.getReader()
       const dec = new TextDecoder()
       let buffer = ''
@@ -74,17 +82,24 @@ export default function AssistantPage() {
           const payload = line.slice(6).trim()
           if (payload === '[DONE]') continue
           try {
-            const { text: chunk } = JSON.parse(payload)
-            setMessages(prev =>
-              prev.map(m => m.id === assistantId ? { ...m, content: m.content + chunk } : m)
-            )
+            const parsed = JSON.parse(payload)
+            // Handle error events sent via SSE stream
+            if (parsed.error) {
+              setMessages(prev =>
+                prev.map(m => m.id === assistantId ? { ...m, content: parsed.error } : m)
+              )
+            } else if (parsed.text) {
+              setMessages(prev =>
+                prev.map(m => m.id === assistantId ? { ...m, content: m.content + parsed.text } : m)
+              )
+            }
           } catch {}
         }
       }
-    } catch {
+    } catch (networkError) {
       setMessages(prev =>
         prev.map(m => m.id === assistantId
-          ? { ...m, content: 'Sorry, I ran into an issue. Please try again.' }
+          ? { ...m, content: 'Network error: Could not reach the AI assistant. Please check your connection and try again.' }
           : m
         )
       )
@@ -93,6 +108,7 @@ export default function AssistantPage() {
       inputRef.current?.focus()
     }
   }
+
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -114,7 +130,7 @@ export default function AssistantPage() {
             <div className="flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 rounded-full bg-sf-green animate-pulse" />
               <p className="text-xs text-sf-muted">
-                Aware of {exams.length} exam{exams.length !== 1 ? 's' : ''} · Powered by Claude
+                Aware of {exams.length} exam{exams.length !== 1 ? 's' : ''} · Powered by Llama
               </p>
             </div>
           </div>
